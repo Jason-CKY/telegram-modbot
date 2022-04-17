@@ -37,6 +37,7 @@ services:
       - modbot
     environment:
       BOT_TOKEN: $DEVBOT_TOKEN
+      MODE: DEBUG
       DEV_CHAT_ID: $DEV_CHAT_ID
       POLLING_INTERVAL: "0.2"
       APP_SERVER: modbot
