@@ -16,14 +16,6 @@ jobs:
       - name: Debug
         run: |
           echo "github.ref -> {{ github.ref }}"
-      - name: Docker metadata
-        id: metadata
-        uses: docker/metadata-action@v3
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/telegram-modbot
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value={{sha}},enable=${{ github.ref_type != 'tag' }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -39,8 +31,7 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
-          file: ./compose/webserver/Dockerfile
+          file: ./compose/pollingserver/Dockerfile
           platforms: linux/arm/v7,linux/arm64/v8,linux/amd64
           push: ${{ github.event.base_ref =='refs/heads/main' && github.ref_type == 'tag' && !startsWith(github.ref, 'refs/tags/v0.')}}
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/telegram-pollingserver:latest
