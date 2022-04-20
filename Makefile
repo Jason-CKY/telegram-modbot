@@ -1,4 +1,4 @@
-MODBOT_VERSION ?= 1.11
+MODBOT_VERSION ?= v1.11
 BACKUP_DIR ?= ~/backup
 MODBOT_BACKUP_FILE ?= modbot-backup.tar
 
