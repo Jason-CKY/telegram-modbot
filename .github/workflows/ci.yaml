@@ -20,7 +20,7 @@ jobs:
         id: metadata
         uses: docker/metadata-action@v3
         with:
-          images: telegram-modbot
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/telegram-modbot
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
