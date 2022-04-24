@@ -1,5 +1,7 @@
 # Telegram moderation bot
 
+[![ci](https://github.com/Jason-CKY/telegram-modbot/actions/workflows/ci.yaml/badge.svg)](https://github.com/Jason-CKY/telegram-modbot/actions/workflows/ci.yaml)
+
 Telegram bot that moderates a group chat by doing a majority poll vote. Bot has to be admin of the group chat with `delete` permission to work.
 
 ## Use
