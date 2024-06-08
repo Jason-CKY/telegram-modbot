@@ -20,6 +20,6 @@ If the number of votes in favour of deleting the message >= certain threshold, I
 }
 
 const SUPPORT_MESSAGE string = `My source code is hosted on https://github.com/Jason-CKY/telegram-modbot. Post any issues with this bot on the github link, and feel free to contribute to the source code with a pull request.`
-const POLL_EXPIRY int = 120
+const DEFAULT_POLL_EXPIRY int = 120
 const MIN_POLL_EXPIRY int = 10
 const MAX_POLL_EXPIRY int = 600
