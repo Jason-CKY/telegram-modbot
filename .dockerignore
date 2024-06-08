@@ -1,0 +1,8 @@
+.vscode
+node_modules
+tmp
+.git
+static/output.css
+pkg/views/*_templ.go
+ignore
+scripts

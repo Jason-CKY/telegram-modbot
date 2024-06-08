@@ -1,0 +1,11 @@
+.vscode
+.env
+node_modules
+
+static/output.css
+tmp
+*_templ.go
+
+*.tar
+ignore
+*.json
