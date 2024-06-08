@@ -5,9 +5,8 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"github.com/Jason-CKY/telegram-reminderbot/pkg/core"
-	"github.com/Jason-CKY/telegram-reminderbot/pkg/handler"
-	"github.com/Jason-CKY/telegram-reminderbot/pkg/utils"
+	"github.com/Jason-CKY/telegram-modbot/pkg/handler"
+	"github.com/Jason-CKY/telegram-modbot/pkg/utils"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
@@ -45,8 +44,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	go core.ScheduledReminderTrigger(bot)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
