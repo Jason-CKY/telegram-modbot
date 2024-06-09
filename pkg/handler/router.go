@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -95,6 +96,99 @@ func HandleCommand(update *tgbotapi.Update, bot *tgbotapi.BotAPI, chatSettings *
 		msg.Text = utils.GetHelpMessage(botUser.String())
 	case "support":
 		msg.Text = utils.SUPPORT_MESSAGE
+	case "getconfig":
+		msg.Text = fmt.Sprintf(`Current group config:
+Threshold: %v
+Poll Expiry: %v seconds`, chatSettings.Threshold, chatSettings.ExpiryTime)
+	case "setthreshold":
+		shouldProcess := update.FromChat().IsPrivate()
+		if !update.FromChat().IsPrivate() {
+			admins, err := bot.GetChatAdministrators(tgbotapi.ChatAdministratorsConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: update.Message.Chat.ID}})
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			for _, admin := range admins {
+				if admin.User.ID == update.Message.From.ID {
+					shouldProcess = true
+				}
+			}
+		}
+		if !shouldProcess {
+			msg.Text = "Only chat administrators allowed to set configs"
+		} else {
+			texts := strings.Split(update.Message.Text, " ")
+			if len(texts) == 2 {
+				threshold, err := strconv.Atoi(texts[1])
+				if err != nil {
+					log.Error(err)
+					return
+				}
+				numMembers, err := bot.GetChatMembersCount(tgbotapi.ChatMemberCountConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: update.FromChat().ID}})
+				if err != nil {
+					log.Error(err)
+					return
+				}
+				if threshold > numMembers {
+					msg.Text = fmt.Sprintf("Invalid threshold %v more than members in the group.", threshold)
+				} else if threshold < 1 {
+					msg.Text = "Invalid threshold cannot be less than 1."
+				} else {
+					chatSettings.Threshold = threshold
+					err = chatSettings.Update()
+					if err != nil {
+						msg.Text = fmt.Sprintf("Error setting threshold\n%v", err.Error())
+						log.Error(err)
+					} else {
+						msg.Text = fmt.Sprintf("threshold set to %v", threshold)
+					}
+				}
+			} else {
+				return
+			}
+		}
+	case "setexpiry":
+		shouldProcess := update.FromChat().IsPrivate()
+		if !update.FromChat().IsPrivate() {
+			admins, err := bot.GetChatAdministrators(tgbotapi.ChatAdministratorsConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: update.Message.Chat.ID}})
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			for _, admin := range admins {
+				if admin.User.ID == update.Message.From.ID {
+					shouldProcess = true
+				}
+			}
+		}
+		if !shouldProcess {
+			msg.Text = "Only chat administrators allowed to set configs"
+		} else {
+			texts := strings.Split(update.Message.Text, " ")
+			if len(texts) == 2 {
+				expiry, err := strconv.Atoi(texts[1])
+				if err != nil {
+					log.Error(err)
+					return
+				}
+				if expiry > utils.MAX_POLL_EXPIRY {
+					msg.Text = fmt.Sprintf("Invalid expiry %v cannot be more than %v.", expiry, utils.MAX_POLL_EXPIRY)
+				} else if expiry < utils.MIN_POLL_EXPIRY {
+					msg.Text = fmt.Sprintf("Invalid threshold cannot be less than %v.", utils.MIN_POLL_EXPIRY)
+				} else {
+					chatSettings.ExpiryTime = expiry
+					err = chatSettings.Update()
+					if err != nil {
+						msg.Text = fmt.Sprintf("Error setting expiry time\n%v", err.Error())
+						log.Error(err)
+					} else {
+						msg.Text = fmt.Sprintf("expiry set as %v seconds", expiry)
+					}
+				}
+			} else {
+				return
+			}
+		}
 	case "delete":
 		if update.Message.ReplyToMessage == nil {
 			msg.Text = "Please make sure to reply to the offending message when making request to delete."
