@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/Jason-CKY/telegram-modbot/pkg/schemas"
 	"github.com/Jason-CKY/telegram-modbot/pkg/utils"
@@ -11,30 +14,67 @@ import (
 )
 
 func HandleUpdate(update *tgbotapi.Update, bot *tgbotapi.BotAPI) {
-	log.Info(update)
-	numMembers, err := bot.GetChatMembersCount(tgbotapi.ChatMemberCountConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: update.FromChat().ID}})
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	chatSettings, _, err := schemas.InsertChatSettingsIfNotPresent(update.Message.Chat.ID, numMembers/2)
-	if err != nil {
-		log.Error(err)
-		return
-	}
 	if update.Message != nil {
+		numMembers, err := bot.GetChatMembersCount(tgbotapi.ChatMemberCountConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: update.FromChat().ID}})
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		chatSettings, _, err := schemas.InsertChatSettingsIfNotPresent(update.Message.Chat.ID, numMembers/2)
+		if err != nil {
+			log.Error(err)
+			return
+		}
 		if update.Message.IsCommand() {
 			HandleCommand(update, bot, chatSettings)
 		}
 	}
 	if update.Poll != nil {
 		if update.Poll.IsClosed {
+			pollWithChatSettings, err := schemas.GetPollWithChatSettingsByPollId(update.Poll.ID)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			if pollWithChatSettings == nil {
+				log.Error("no poll found")
+				return
+			}
 			for _, option := range update.Poll.Options {
-				if option.Text == "Delete" && option.VoterCount >= chatSettings.Threshold {
-					deleteMessage := tgbotapi.NewDeleteMessage(update.Message.Chat.ID, update.Message.MessageID)
-					if _, err := bot.Request(deleteMessage); err != nil {
-						log.Error(err)
-						return
+				if option.Text == "Delete" {
+					if option.VoterCount >= pollWithChatSettings.ChatSettings.Threshold {
+						poll := schemas.Poll{
+							PollId: pollWithChatSettings.PollId,
+						}
+						err = poll.Delete()
+						if err != nil {
+							log.Error(err)
+							return
+						}
+						deleteMessage := tgbotapi.NewDeleteMessage(pollWithChatSettings.ChatSettings.ChatId, pollWithChatSettings.MessageId)
+						if _, err := bot.Request(deleteMessage); err != nil {
+							log.Error(err)
+							if strings.Contains(err.Error(), "can't be deleted") {
+								msg := tgbotapi.NewMessage(pollWithChatSettings.ChatSettings.ChatId, "Error deleting message. Please check if I have the permission to delete group messages.")
+								if _, err := bot.Request(msg); err != nil {
+									log.Error(err)
+									return
+								}
+							}
+							return
+						} else {
+							msg := tgbotapi.NewMessage(pollWithChatSettings.ChatSettings.ChatId, "Offending message has been deleted.")
+							if _, err := bot.Request(msg); err != nil {
+								log.Error(err)
+								return
+							}
+						}
+					} else {
+						msg := tgbotapi.NewMessage(pollWithChatSettings.ChatSettings.ChatId, "Threshold votes not reached before poll expiry.")
+						if _, err := bot.Request(msg); err != nil {
+							log.Error(err)
+							return
+						}
 					}
 				}
 			}
@@ -57,10 +97,17 @@ func HandleCommand(update *tgbotapi.Update, bot *tgbotapi.BotAPI, chatSettings *
 		msg.Text = utils.SUPPORT_MESSAGE
 	case "delete":
 		if update.Message.ReplyToMessage == nil {
+			msg.Text = "Please make sure to reply to the offending message when making request to delete."
+			if _, err := bot.Request(msg); err != nil {
+				log.Error(err)
+				return
+			}
 			return
 		}
 		var options = []string{"Delete", "Don't Delete"}
-		question := fmt.Sprintf(`Poll to delete the message above. If >=%v of the group members vote to delete, the replied message shall be deleted.`, chatSettings.Threshold)
+		question := fmt.Sprintf(`Poll to delete the message above.  This poll will last for %v seconds, if >=%v of the group members vote to delete, the replied message shall be deleted.`,
+			chatSettings.ExpiryTime,
+			chatSettings.Threshold)
 		pollConfig := tgbotapi.SendPollConfig{
 			BaseChat: tgbotapi.BaseChat{
 				ChatID:           update.Message.Chat.ID,
@@ -69,9 +116,41 @@ func HandleCommand(update *tgbotapi.Update, bot *tgbotapi.BotAPI, chatSettings *
 			Question:    question,
 			Options:     options,
 			IsAnonymous: true, // This is Telegram's default.
-			OpenPeriod:  chatSettings.ExpiryTime,
 		}
-		if _, err := bot.Request(pollConfig); err != nil {
+		pollResponse, err := bot.Request(pollConfig)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		buf, err := pollResponse.Result.MarshalJSON()
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		var messageResponse tgbotapi.Message
+		err = json.Unmarshal(buf, &messageResponse)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+
+		go func(update *tgbotapi.Update, bot *tgbotapi.BotAPI, chatSettings *schemas.ChatSettings, messageResponse tgbotapi.Message) {
+			time.Sleep(time.Duration(chatSettings.ExpiryTime) * time.Second)
+			endPollConfig := tgbotapi.NewStopPoll(update.Message.Chat.ID, messageResponse.MessageID)
+			_, err := bot.Request(endPollConfig)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+		}(update, bot, chatSettings, messageResponse)
+
+		poll := schemas.Poll{
+			PollId:    messageResponse.Poll.ID,
+			MessageId: update.Message.ReplyToMessage.MessageID,
+			ChatId:    update.Message.Chat.ID,
+		}
+		err = poll.Create()
+		if err != nil {
 			log.Error(err)
 			return
 		}

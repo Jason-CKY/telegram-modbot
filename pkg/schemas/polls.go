@@ -10,15 +10,15 @@ import (
 	"github.com/Jason-CKY/telegram-modbot/pkg/utils"
 )
 
-type ChatSettings struct {
-	ChatId     int64 `json:"chat_id"`
-	ExpiryTime int   `json:"expiry_time"`
-	Threshold  int   `json:"threshold"`
+type Poll struct {
+	PollId    string `json:"poll_id"`
+	MessageId int    `json:"message_id"`
+	ChatId    int64  `json:"chat_id"`
 }
 
-func (chatSettings ChatSettings) Create() error {
-	endpoint := fmt.Sprintf("%v/items/modbot_settings", utils.DirectusHost)
-	reqBody, _ := json.Marshal(chatSettings)
+func (poll Poll) Create() error {
+	endpoint := fmt.Sprintf("%v/items/modbot_polls", utils.DirectusHost)
+	reqBody, _ := json.Marshal(poll)
 	req, httpErr := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", utils.DirectusToken))
@@ -33,15 +33,15 @@ func (chatSettings ChatSettings) Create() error {
 	body, _ := io.ReadAll(res.Body)
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return fmt.Errorf("error inserting chat settings to directus: %v", string(body))
+		return fmt.Errorf("error inserting polls to directus: %v", string(body))
 	}
 
 	return nil
 }
 
-func (chatSettings ChatSettings) Update() error {
-	endpoint := fmt.Sprintf("%v/items/modbot_settings/%v", utils.DirectusHost, chatSettings.ChatId)
-	reqBody, _ := json.Marshal(chatSettings)
+func (poll Poll) Update() error {
+	endpoint := fmt.Sprintf("%v/items/modbot_polls/%v", utils.DirectusHost, poll.PollId)
+	reqBody, _ := json.Marshal(poll)
 	req, httpErr := http.NewRequest(http.MethodPatch, endpoint, bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", utils.DirectusToken))
@@ -62,8 +62,8 @@ func (chatSettings ChatSettings) Update() error {
 	return nil
 }
 
-func (chatSettings ChatSettings) Delete() error {
-	endpoint := fmt.Sprintf("%v/items/modbot_settings/%v", utils.DirectusHost, chatSettings.ChatId)
+func (poll Poll) Delete() error {
+	endpoint := fmt.Sprintf("%v/items/modbot_polls/%v", utils.DirectusHost, poll.PollId)
 	req, httpErr := http.NewRequest(http.MethodDelete, endpoint, nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", utils.DirectusToken))
@@ -83,17 +83,30 @@ func (chatSettings ChatSettings) Delete() error {
 	return nil
 }
 
-func GetChatSettingsByChatId(chatId int64) (*ChatSettings, error) {
-	endpoint := fmt.Sprintf("%v/items/modbot_settings", utils.DirectusHost)
+type PollWithChatSettings struct {
+	PollId       string       `json:"poll_id"`
+	MessageId    int          `json:"message_id"`
+	ChatSettings ChatSettings `json:"chat_id"`
+}
+
+func GetPollWithChatSettingsByPollId(pollId string) (*PollWithChatSettings, error) {
+	endpoint := fmt.Sprintf("%v/items/modbot_polls", utils.DirectusHost)
 	reqBody := []byte(fmt.Sprintf(`{
 		"query": {
 			"filter": {
-				"chat_id": {
+				"poll_id": {
 					"_eq": "%v"
 				}
-			}
+			},
+			"fields": [
+				"poll_id",
+				"message_id",
+				"chat_id.chat_id",
+				"chat_id.threshold",
+				"chat_id.expiry_time"
+			]
 		}
-	}`, chatId))
+	}`, pollId))
 	req, httpErr := http.NewRequest("SEARCH", endpoint, bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", utils.DirectusToken))
@@ -110,37 +123,16 @@ func GetChatSettingsByChatId(chatId int64) (*ChatSettings, error) {
 	if res.StatusCode != 200 {
 		return nil, fmt.Errorf("error getting chat settings in directus: %v", string(body))
 	}
-	var chatSettingsResponse map[string][]ChatSettings
-	jsonErr := json.Unmarshal(body, &chatSettingsResponse)
+	var pollResponse map[string][]PollWithChatSettings
+	jsonErr := json.Unmarshal(body, &pollResponse)
 	// error handling for json unmarshaling
 	if jsonErr != nil {
 		return nil, jsonErr
 	}
 
-	if len(chatSettingsResponse["data"]) == 0 {
+	if len(pollResponse["data"]) == 0 {
 		return nil, nil
 	}
 
-	return &chatSettingsResponse["data"][0], nil
-}
-
-func InsertChatSettingsIfNotPresent(chatId int64, defaultThreshold int) (chatSettings *ChatSettings, settingsPresnet bool, insertError error) {
-	chatSettings, err := GetChatSettingsByChatId(chatId)
-	if err != nil {
-		return nil, false, err
-	}
-	if chatSettings == nil {
-		chatSettings = &ChatSettings{
-			ChatId:     chatId,
-			ExpiryTime: utils.DEFAULT_POLL_EXPIRY,
-			Threshold:  defaultThreshold,
-		}
-		err := chatSettings.Create()
-		if err != nil {
-			return nil, false, err
-		}
-
-		return chatSettings, false, nil
-	}
-	return chatSettings, true, nil
+	return &pollResponse["data"][0], nil
 }
