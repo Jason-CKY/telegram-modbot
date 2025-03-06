@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/Jason-CKY/telegram-modbot/pkg/utils"
 )
@@ -14,6 +15,43 @@ type Poll struct {
 	PollId    string `json:"poll_id"`
 	MessageId int    `json:"message_id"`
 	ChatId    int64  `json:"chat_id"`
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (cs Poll) MarshalJSON() ([]byte, error) {
+	type Alias Poll // Prevent recursion
+
+	aux := &struct {
+		ChatId string `json:"chat_id"`
+		*Alias
+	}{
+		ChatId: strconv.FormatInt(cs.ChatId, 10),
+		Alias:  (*Alias)(&cs),
+	}
+	return json.Marshal(aux)
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (cs *Poll) UnmarshalJSON(data []byte) error {
+	type Alias Poll // Prevent recursion
+
+	aux := &struct {
+		ChatId string `json:"chat_id"`
+		*Alias
+	}{
+		Alias: (*Alias)(cs),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	chatId, err := strconv.ParseInt(aux.ChatId, 10, 64)
+	if err != nil {
+		return err
+	}
+	cs.ChatId = chatId
+	return nil
 }
 
 func (poll Poll) Create() error {
